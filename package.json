@@ -1,0 +1,20 @@
+{
+  "name": "codelife-study-portal",
+  "version": "1.0.0",
+  "description": "Trang web học tập kiến trúc hệ thống và lập trình cho CodeLife bằng Next.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "marked": "^12.0.2",
+    "lucide-react": "^0.379.0",
+    "canvas-confetti": "^1.9.3"
+  },
+  "author": "",
+  "license": "ISC"
+}
