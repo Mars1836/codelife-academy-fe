@@ -31,6 +31,31 @@ const normalizeCategory = (category, slug) => {
   return labels[category] || category || getCategory(slug);
 };
 
+const normalizeDocumentTitle = (value) => {
+  let title = String(value || '').trim().replace(/^#{1,6}\s*/, '').trim();
+  const wrappers = [['**', '**'], ['__', '__'], ['*', '*'], ['_', '_']];
+  for (const [start, end] of wrappers) {
+    if (title.startsWith(start) && title.endsWith(end) && title.length > start.length + end.length) {
+      title = title.slice(start.length, -end.length).trim();
+      break;
+    }
+  }
+  return title;
+};
+
+const removeDuplicateLeadingTitle = (content, title) => {
+  const lines = String(content || '').split('\n');
+  const firstContentLine = lines.findIndex(line => line.trim());
+  if (firstContentLine === -1) return '';
+  if (normalizeDocumentTitle(lines[firstContentLine]) !== normalizeDocumentTitle(title)) return content;
+
+  lines.splice(firstContentLine, 1);
+  while (lines[firstContentLine] !== undefined && !lines[firstContentLine].trim()) {
+    lines.splice(firstContentLine, 1);
+  }
+  return lines.join('\n');
+};
+
 const toLesson = (document) => {
   const content = document.content || '';
   const computedWordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
@@ -38,7 +63,7 @@ const toLesson = (document) => {
   return {
     id: document.slug,
     slug: document.slug,
-    title: document.title,
+    title: normalizeDocumentTitle(document.title),
     content,
     wordCount,
     readingTime: document.readingTime || Math.max(1, Math.ceil(wordCount / 200)),
@@ -971,7 +996,7 @@ export default function Home() {
                   <div 
                     className="markdown-body"
                     dangerouslySetInnerHTML={{ 
-                      __html: addIdsToHeadings(marked.parse(activeLesson.content || '')) 
+                      __html: addIdsToHeadings(marked.parse(removeDuplicateLeadingTitle(activeLesson.content || '', activeLesson.title)))
                     }}
                   ></div>
                 )}
