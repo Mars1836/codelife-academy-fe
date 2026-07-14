@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Terminal, X, Search, Menu, ChevronRight, ChevronDown, 
   Folder, Clock, FileText, CheckCircle2, ArrowLeft, ArrowRight, 
-  Sun, Moon, ListOrdered, Edit3, Check, Lightbulb, RotateCcw 
+  Sun, Moon, ListOrdered, Edit3, Check, Lightbulb, RotateCcw,
+  UserRound, LogOut
 } from 'lucide-react';
 import { marked } from 'marked';
 
@@ -69,6 +70,7 @@ export default function Home() {
   // App state
   const [lessons, setLessons] = useState([]);
   const [activeLesson, setActiveLesson] = useState(null);
+  const [loadingLessonId, setLoadingLessonId] = useState('');
   const [theme, setTheme] = useState('dark');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -98,6 +100,15 @@ export default function Home() {
   // Status dropdown state
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
+  // Auth state
+  const [authUser, setAuthUser] = useState(null);
+  const [authToken, setAuthToken] = useState('');
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authView, setAuthView] = useState('login');
+  const [authForm, setAuthForm] = useState({ email: '', password: '', otp: '' });
+  const [authMessage, setAuthMessage] = useState('');
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+
   // Scroll tracking refs
   const contentScrollRef = useRef(null);
   const articleRef = useRef(null);
@@ -110,18 +121,26 @@ export default function Home() {
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
 
+    const savedToken = localStorage.getItem('auth-token');
+    if (savedToken) {
+      setAuthToken(savedToken);
+      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${savedToken}` } })
+        .then(response => response.ok ? response.json() : Promise.reject())
+        .then(payload => setAuthUser(payload.data))
+        .catch(() => {
+          localStorage.removeItem('auth-token');
+          setAuthToken('');
+          setAuthUser(null);
+        });
+    }
+
     const controller = new AbortController();
     const loadDocuments = async () => {
       try {
         const listResponse = await fetch('/api/documents', { signal: controller.signal });
         if (!listResponse.ok) throw new Error('Không thể tải danh sách tài liệu');
         const listPayload = await listResponse.json();
-        const details = await Promise.all((listPayload.data || []).map(async (item) => {
-          const response = await fetch(`/api/documents/${encodeURIComponent(item.slug)}`, { signal: controller.signal });
-          if (!response.ok) throw new Error(`Không thể tải tài liệu ${item.slug}`);
-          const payload = await response.json();
-          return toLesson(payload.data);
-        }));
+        const details = (listPayload.data || []).map(toLesson);
 
         setLessons(details);
         const savedStatuses = {};
@@ -173,7 +192,7 @@ export default function Home() {
     setIsNoteSaved(false);
 
     // 2. Generate flashcards from headers
-    const cardItems = generateFlashcardsFromContent(activeLesson.content);
+    const cardItems = generateFlashcardsFromContent(activeLesson.content || '');
     setFlashcards(cardItems);
 
     // 3. Reset scroll position to top or restore last scroll pos
@@ -325,6 +344,91 @@ export default function Home() {
     document.documentElement.setAttribute('data-theme', nextTheme);
   };
 
+  const updateAuthForm = (field, value) => {
+    setAuthForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const submitAuth = async (event) => {
+    event.preventDefault();
+    setIsAuthSubmitting(true);
+    setAuthMessage('');
+    try {
+      const path = authView === 'register'
+        ? 'register'
+        : authView === 'verify'
+          ? 'verify-email'
+          : 'login';
+      const body = authView === 'verify'
+        ? { email: authForm.email, otp: authForm.otp }
+        : { email: authForm.email, password: authForm.password };
+      const response = await fetch(`/api/auth/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error?.message || 'Request failed');
+      }
+      if (authView === 'register') {
+        setAuthView('verify');
+        setAuthMessage('OTP sent. Check email or backend log in dev.');
+      } else if (authView === 'verify') {
+        setAuthView('login');
+        setAuthMessage('Email verified. You can login now.');
+      } else {
+        localStorage.setItem('auth-token', payload.data.token);
+        setAuthToken(payload.data.token);
+        setAuthUser(payload.data.user);
+        setIsAuthOpen(false);
+        setAuthForm({ email: '', password: '', otp: '' });
+      }
+    } catch (error) {
+      setAuthMessage(error.message);
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('auth-token');
+    setAuthToken('');
+    setAuthUser(null);
+  };
+
+  const loadLessonDetail = async (lesson) => {
+    if (!lesson || lesson.content) return lesson;
+
+    setLoadingLessonId(lesson.id);
+    try {
+      const response = await fetch(`/api/documents/${encodeURIComponent(lesson.slug)}`);
+      if (!response.ok) throw new Error(`Cannot load document ${lesson.slug}`);
+
+      const payload = await response.json();
+      const detailedLesson = toLesson(payload.data);
+
+      setLessons(currentLessons => currentLessons.map(item => (
+        item.id === detailedLesson.id ? { ...item, ...detailedLesson } : item
+      )));
+      setActiveLesson(current => (
+        current?.id === detailedLesson.id ? { ...current, ...detailedLesson } : current
+      ));
+
+      return detailedLesson;
+    } finally {
+      setLoadingLessonId(current => current === lesson.id ? '' : current);
+    }
+  };
+
+  const openLesson = (lesson) => {
+    if (!lesson) return;
+
+    setActiveLesson(lesson);
+    setIsSidebarLeftActive(false);
+    setIsSidebarRightActive(false);
+    loadLessonDetail(lesson).catch(console.error);
+  };
+
   // Handle Search Input
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -338,26 +442,14 @@ export default function Home() {
 
     lessons.forEach(doc => {
       const inTitle = doc.title.toLowerCase().includes(query);
-      const contentLower = doc.content.toLowerCase();
-      const inContent = contentLower.includes(query);
+      const inCategory = doc.category.toLowerCase().includes(query);
 
-      if (inTitle || inContent) {
-        // Find snippet
-        let snippet = '';
-        if (inContent) {
-          const index = contentLower.indexOf(query);
-          const start = Math.max(0, index - 50);
-          const end = Math.min(doc.content.length, index + query.length + 80);
-          snippet = doc.content.slice(start, end).replace(/\n/g, ' ') + '...';
-        } else {
-          snippet = doc.content.slice(0, 120).replace(/\n/g, ' ') + '...';
-        }
-
+      if (inTitle || inCategory) {
         results.push({
           id: doc.id,
           title: doc.title,
-          snippet: snippet,
-          matchType: inTitle ? 'title' : 'content'
+          snippet: `${doc.category} · ${doc.readingTime} min · ${doc.wordCount} words`,
+          matchType: inTitle ? 'title' : 'category'
         });
       }
     });
@@ -511,7 +603,7 @@ export default function Home() {
   return (
     <>
       {/* Top Progress Scroll Indicator */}
-      <div id="scroll-progress" class="scroll-progress-bar"></div>
+      <div id="scroll-progress" className="scroll-progress-bar"></div>
 
       <div 
         className="app-container"
@@ -597,7 +689,7 @@ export default function Home() {
                       className="search-result-item"
                       onClick={() => {
                         const target = lessons.find(l => l.id === result.id);
-                        if (target) setActiveLesson(target);
+                        if (target) openLesson(target);
                         setSearchQuery('');
                       }}
                     >
@@ -628,10 +720,7 @@ export default function Home() {
                       <li 
                         key={lesson.id}
                         className={`lesson-item-link ${isActive ? 'active' : ''}`}
-                        onClick={() => {
-                          setActiveLesson(lesson);
-                          setIsSidebarLeftActive(false);
-                        }}
+                        onClick={() => openLesson(lesson)}
                       >
                         <div className="lesson-status-icon">
                           <span className={`status-indicator ${status}`}></span>
@@ -682,6 +771,20 @@ export default function Home() {
             </div>
             
             <div className="header-right">
+              {authUser ? (
+                <div className="auth-user-chip">
+                  <span>{authUser.email}</span>
+                  <button className="icon-button" onClick={logout} title="Logout">
+                    <LogOut size={15} />
+                  </button>
+                </div>
+              ) : (
+                <button className="auth-open-btn" onClick={() => setIsAuthOpen(true)}>
+                  <UserRound size={15} />
+                  <span>Login</span>
+                </button>
+              )}
+
               {activeLesson ? (
                 <div className="status-dropdown-container">
                   <button 
@@ -748,12 +851,16 @@ export default function Home() {
 
                 <h1 className="document-title">{activeLesson.title}</h1>
 
-                <div 
-                  className="markdown-body"
-                  dangerouslySetInnerHTML={{ 
-                    __html: addIdsToHeadings(marked.parse(activeLesson.content)) 
-                  }}
-                ></div>
+                {loadingLessonId === activeLesson.id && !activeLesson.content ? (
+                  <div className="document-loading">Loading document...</div>
+                ) : (
+                  <div 
+                    className="markdown-body"
+                    dangerouslySetInnerHTML={{ 
+                      __html: addIdsToHeadings(marked.parse(activeLesson.content || '')) 
+                    }}
+                  ></div>
+                )}
 
                 {/* Footer buttons */}
                 <div className="lesson-footer">
@@ -778,7 +885,7 @@ export default function Home() {
                     {prevLesson ? (
                       <button 
                         className="btn btn-secondary nav-btn" 
-                        onClick={() => setActiveLesson(prevLesson)}
+                        onClick={() => openLesson(prevLesson)}
                       >
                         <ArrowLeft size={16} />
                         <div className="nav-btn-text">
@@ -793,7 +900,7 @@ export default function Home() {
                     {nextLesson ? (
                       <button 
                         className="btn btn-secondary nav-btn" 
-                        onClick={() => setActiveLesson(nextLesson)}
+                        onClick={() => openLesson(nextLesson)}
                       >
                         <div className="nav-btn-text">
                           <span className="label">BÀI TIẾP THEO</span>
@@ -818,7 +925,7 @@ export default function Home() {
                   {getResumeLesson() && (
                     <button 
                       className="dashboard-resume-btn"
-                      onClick={() => setActiveLesson(getResumeLesson())}
+                      onClick={() => openLesson(getResumeLesson())}
                     >
                       <span>Học tiếp: {getResumeLesson().title}</span>
                       <ChevronRight size={14} />
@@ -853,7 +960,7 @@ export default function Home() {
                           <div 
                             key={lesson.id} 
                             className="dashboard-lesson-card"
-                            onClick={() => setActiveLesson(lesson)}
+                            onClick={() => openLesson(lesson)}
                           >
                             <div className="dashboard-lesson-card-header">
                               <h4>{lesson.title}</h4>
@@ -862,7 +969,7 @@ export default function Home() {
                               </span>
                             </div>
                             <p className="dashboard-lesson-card-desc">
-                              {lesson.content.replace(/[#*`_-]/g, '').slice(0, 150) + '...'}
+                              {`${lesson.category} · ${lesson.readingTime} min · ${lesson.wordCount} words`}
                             </p>
                             <div className="dashboard-lesson-card-meta">
                               <span><Clock size={12} /> {lesson.readingTime} phút đọc</span>
@@ -1024,6 +1131,82 @@ export default function Home() {
         )}
 
       </div>
+
+      {isAuthOpen && (
+        <div className="auth-modal-backdrop" onClick={() => setIsAuthOpen(false)}>
+          <form className="auth-modal" onSubmit={submitAuth} onClick={(event) => event.stopPropagation()}>
+            <div className="auth-modal-header">
+              <div>
+                <span className="auth-kicker">Account</span>
+                <h2>{authView === 'register' ? 'Register' : authView === 'verify' ? 'Verify email' : 'Login'}</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setIsAuthOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="auth-field">
+              <span>Email</span>
+              <input
+                type="email"
+                value={authForm.email}
+                onChange={(event) => updateAuthForm('email', event.target.value)}
+                required
+              />
+            </label>
+
+            {authView !== 'verify' && (
+              <label className="auth-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={authForm.password}
+                  onChange={(event) => updateAuthForm('password', event.target.value)}
+                  minLength={8}
+                  required
+                />
+              </label>
+            )}
+
+            {authView === 'verify' && (
+              <label className="auth-field">
+                <span>OTP</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={authForm.otp}
+                  onChange={(event) => updateAuthForm('otp', event.target.value)}
+                  maxLength={6}
+                  required
+                />
+              </label>
+            )}
+
+            {authMessage && <p className="auth-message">{authMessage}</p>}
+
+            <button className="auth-submit-btn" type="submit" disabled={isAuthSubmitting}>
+              {isAuthSubmitting ? 'Submitting...' : authView === 'register' ? 'Send OTP' : authView === 'verify' ? 'Verify' : 'Login'}
+            </button>
+
+            <div className="auth-switch-row">
+              {authView === 'login' ? (
+                <button type="button" onClick={() => { setAuthView('register'); setAuthMessage(''); }}>
+                  Create account
+                </button>
+              ) : (
+                <button type="button" onClick={() => { setAuthView('login'); setAuthMessage(''); }}>
+                  Back to login
+                </button>
+              )}
+              {authView !== 'verify' && (
+                <button type="button" onClick={() => { setAuthView('verify'); setAuthMessage(''); }}>
+                  Enter OTP
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }
