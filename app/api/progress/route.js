@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server';
 
 const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8080';
 
-export async function GET(request, { params }) {
+export async function GET(request) {
   try {
-    const slug = encodeURIComponent(params.slug);
     const authorization = request.headers.get('authorization');
-    const response = await fetch(`${backendUrl}/api/v1/documents/${slug}`, {
+    const response = await fetch(`${backendUrl}/api/v1/progress`, {
       headers: authorization ? { Authorization: authorization } : {},
       cache: 'no-store',
     });
@@ -14,7 +13,7 @@ export async function GET(request, { params }) {
     return NextResponse.json(payload, { status: response.status });
   } catch {
     return NextResponse.json(
-      { error: { message: 'Backend tài liệu không khả dụng' } },
+      { error: { message: 'Learning progress backend unavailable' } },
       { status: 503 },
     );
   }

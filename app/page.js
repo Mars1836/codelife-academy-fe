@@ -103,6 +103,7 @@ export default function Home() {
   // Auth state
   const [authUser, setAuthUser] = useState(null);
   const [authToken, setAuthToken] = useState('');
+  const [pendingLessonId, setPendingLessonId] = useState('');
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authView, setAuthView] = useState('login');
   const [authForm, setAuthForm] = useState({ email: '', password: '', otp: '' });
@@ -113,6 +114,7 @@ export default function Home() {
   const contentScrollRef = useRef(null);
   const articleRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  const progressSaveTimeoutsRef = useRef({});
   const isTransitioningRef = useRef(false);
 
   // Initialize preferences and load documents from the backend API.
@@ -126,7 +128,10 @@ export default function Home() {
       setAuthToken(savedToken);
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${savedToken}` } })
         .then(response => response.ok ? response.json() : Promise.reject())
-        .then(payload => setAuthUser(payload.data))
+        .then(async payload => {
+          setAuthUser(payload.data);
+          await loadLearningProgress(savedToken);
+        })
         .catch(() => {
           localStorage.removeItem('auth-token');
           setAuthToken('');
@@ -163,6 +168,69 @@ export default function Home() {
     loadDocuments();
     return () => controller.abort();
   }, []);
+
+  const applyLearningProgress = (items) => {
+    const serverStatuses = {};
+    const serverFlashcards = {};
+
+    (items || []).forEach(item => {
+      serverStatuses[item.documentSlug] = item.status;
+      serverFlashcards[item.documentSlug] = item.checkedFlashcards || {};
+      localStorage.setItem(`status-${item.documentSlug}`, item.status);
+      localStorage.setItem(`scroll-${item.documentSlug}`, String(item.scrollPosition || 0));
+      localStorage.setItem(`notes-${item.documentSlug}`, item.note || '');
+      localStorage.setItem(`flashcards-${item.documentSlug}`, JSON.stringify(item.checkedFlashcards || {}));
+    });
+
+    setLessonStatuses(current => ({ ...current, ...serverStatuses }));
+    setCheckedFlashcards(current => ({ ...current, ...serverFlashcards }));
+
+    if (activeLesson) {
+      const currentProgress = (items || []).find(item => item.documentSlug === activeLesson.id);
+      if (currentProgress) {
+        setNoteText(currentProgress.note || '');
+        setTimeout(() => {
+          if (contentScrollRef.current) {
+            contentScrollRef.current.scrollTop = currentProgress.scrollPosition || 0;
+          }
+        }, 0);
+      }
+    }
+  };
+
+  const loadLearningProgress = async (token) => {
+    if (!token) return;
+    const response = await fetch('/api/progress', {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('Cannot load learning progress');
+    const payload = await response.json();
+    applyLearningProgress(payload.data || []);
+  };
+
+  const saveLearningProgress = async (lessonId, changes, token = authToken) => {
+    if (!token || !lessonId) return;
+    const response = await fetch(`/api/progress/${encodeURIComponent(lessonId)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(changes),
+    });
+    if (!response.ok) throw new Error('Cannot save learning progress');
+  };
+
+  const scheduleProgressSave = (lessonId, key, changes, delay = 1200) => {
+    if (!authToken || !lessonId) return;
+    const timeoutKey = `${lessonId}:${key}`;
+    clearTimeout(progressSaveTimeoutsRef.current[timeoutKey]);
+    progressSaveTimeoutsRef.current[timeoutKey] = setTimeout(() => {
+      saveLearningProgress(lessonId, changes).catch(console.error);
+      delete progressSaveTimeoutsRef.current[timeoutKey];
+    }, delay);
+  };
 
   // Calculate overall progress when lesson statuses change
   useEffect(() => {
@@ -252,6 +320,7 @@ export default function Home() {
 
     notesSaveTimeoutRef.current = setTimeout(() => {
       localStorage.setItem(`notes-${activeLesson.id}`, noteText);
+      saveLearningProgress(activeLesson.id, { note: noteText }).catch(console.error);
       setIsNoteSaved(true);
       setTimeout(() => setIsNoteSaved(false), 2000);
     }, 1000);
@@ -334,6 +403,7 @@ export default function Home() {
     const updatedStatuses = { ...lessonStatuses, [lessonId]: newStatus };
     setLessonStatuses(updatedStatuses);
     localStorage.setItem(`status-${lessonId}`, newStatus);
+    saveLearningProgress(lessonId, { status: newStatus }).catch(console.error);
   };
 
   // Toggle theme Sáng/Tối
@@ -372,7 +442,8 @@ export default function Home() {
       }
       if (authView === 'register') {
         setAuthView('verify');
-        setAuthMessage('OTP sent. Check email or backend log in dev.');
+        setAuthForm(current => ({ ...current, password: '', otp: '' }));
+        setAuthMessage('OTP sent. Please check your email.');
       } else if (authView === 'verify') {
         setAuthView('login');
         setAuthMessage('Email verified. You can login now.');
@@ -380,6 +451,7 @@ export default function Home() {
         localStorage.setItem('auth-token', payload.data.token);
         setAuthToken(payload.data.token);
         setAuthUser(payload.data.user);
+        await loadLearningProgress(payload.data.token);
         setIsAuthOpen(false);
         setAuthForm({ email: '', password: '', otp: '' });
       }
@@ -391,17 +463,37 @@ export default function Home() {
   };
 
   const logout = () => {
+    Object.values(progressSaveTimeoutsRef.current).forEach(clearTimeout);
+    progressSaveTimeoutsRef.current = {};
     localStorage.removeItem('auth-token');
     setAuthToken('');
     setAuthUser(null);
+    setPendingLessonId('');
+    setActiveLesson(null);
+    setLessons(current => current.map(lesson => ({ ...lesson, content: '' })));
   };
 
-  const loadLessonDetail = async (lesson) => {
+  const loadLessonDetail = async (lesson, token = authToken) => {
     if (!lesson || lesson.content) return lesson;
+    if (!token) throw new Error('Login is required to view this document');
 
     setLoadingLessonId(lesson.id);
     try {
-      const response = await fetch(`/api/documents/${encodeURIComponent(lesson.slug)}`);
+      const response = await fetch(`/api/documents/${encodeURIComponent(lesson.slug)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (response.status === 401) {
+        localStorage.removeItem('auth-token');
+        setAuthToken('');
+        setAuthUser(null);
+        setActiveLesson(null);
+        setPendingLessonId(lesson.id);
+        setAuthView('login');
+        setAuthMessage('Your session has expired. Please login again.');
+        setIsAuthOpen(true);
+        throw new Error('Session expired');
+      }
       if (!response.ok) throw new Error(`Cannot load document ${lesson.slug}`);
 
       const payload = await response.json();
@@ -422,12 +514,31 @@ export default function Home() {
 
   const openLesson = (lesson) => {
     if (!lesson) return;
+    if (!authToken) {
+      setPendingLessonId(lesson.id);
+      setAuthView('login');
+      setAuthMessage('Please login to view the document.');
+      setIsAuthOpen(true);
+      return;
+    }
 
     setActiveLesson(lesson);
     setIsSidebarLeftActive(false);
     setIsSidebarRightActive(false);
     loadLessonDetail(lesson).catch(console.error);
   };
+
+  useEffect(() => {
+    if (!authToken || !pendingLessonId) return;
+    const lesson = lessons.find(item => item.id === pendingLessonId);
+    if (!lesson) return;
+
+    setPendingLessonId('');
+    setActiveLesson(lesson);
+    setIsSidebarLeftActive(false);
+    setIsSidebarRightActive(false);
+    loadLessonDetail(lesson, authToken).catch(console.error);
+  }, [authToken, pendingLessonId, lessons]);
 
   // Handle Search Input
   useEffect(() => {
@@ -476,6 +587,7 @@ export default function Home() {
     // 2. Save scroll position to localStorage
     if (activeLesson) {
       localStorage.setItem(`scroll-${activeLesson.id}`, scrollTop.toString());
+      scheduleProgressSave(activeLesson.id, 'scroll', { scrollPosition: Math.round(scrollTop) });
     }
 
     // 3. Auto mark as completed if scrolled past 92%
@@ -548,6 +660,7 @@ export default function Home() {
     const updatedChecked = { ...checkedFlashcards, [activeLesson.id]: lessonChecked };
     setCheckedFlashcards(updatedChecked);
     localStorage.setItem(`flashcards-${activeLesson.id}`, JSON.stringify(lessonChecked));
+    saveLearningProgress(activeLesson.id, { checkedFlashcards: lessonChecked }).catch(console.error);
 
     // If all flashcards are checked, auto mark lesson as completed
     const allChecked = flashcards.every((_, i) => lessonChecked[i]);
@@ -562,6 +675,7 @@ export default function Home() {
     const updatedChecked = { ...checkedFlashcards, [activeLesson.id]: {} };
     setCheckedFlashcards(updatedChecked);
     localStorage.setItem(`flashcards-${activeLesson.id}`, JSON.stringify({}));
+    saveLearningProgress(activeLesson.id, { checkedFlashcards: {} }).catch(console.error);
   };
 
   // Group lessons by category
@@ -779,7 +893,7 @@ export default function Home() {
                   </button>
                 </div>
               ) : (
-                <button className="auth-open-btn" onClick={() => setIsAuthOpen(true)}>
+                <button className="auth-open-btn" onClick={() => { setAuthView('login'); setAuthMessage(''); setIsAuthOpen(true); }}>
                   <UserRound size={15} />
                   <span>Login</span>
                 </button>
@@ -1151,6 +1265,7 @@ export default function Home() {
                 type="email"
                 value={authForm.email}
                 onChange={(event) => updateAuthForm('email', event.target.value)}
+                readOnly={authView === 'verify'}
                 required
               />
             </label>
@@ -1196,11 +1311,6 @@ export default function Home() {
               ) : (
                 <button type="button" onClick={() => { setAuthView('login'); setAuthMessage(''); }}>
                   Back to login
-                </button>
-              )}
-              {authView !== 'verify' && (
-                <button type="button" onClick={() => { setAuthView('verify'); setAuthMessage(''); }}>
-                  Enter OTP
                 </button>
               )}
             </div>
