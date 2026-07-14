@@ -139,10 +139,17 @@ input, textarea, button, select {
 /* --- Layout Grid --- */
 .app-container {
     display: grid;
-    grid-template-columns: var(--sidebar-left-width) 1fr var(--sidebar-right-width);
     height: 100vh;
     position: relative;
     overflow: hidden;
+}
+
+.app-container.has-active-lesson {
+    grid-template-columns: var(--sidebar-left-width) 1fr var(--sidebar-right-width);
+}
+
+.app-container.no-active-lesson {
+    grid-template-columns: var(--sidebar-left-width) 1fr;
 }
 
 /* --- Scroll Progress Bar --- */
@@ -442,13 +449,21 @@ input, textarea, button, select {
     color: var(--text-muted);
 }
 
-/* --- Search Results List --- */
+.search-wrapper {
+    position: relative;
+    margin: 0 24px 20px 24px;
+}
+
+.search-wrapper .search-box {
+    margin: 0;
+}
+
 .search-results-list {
     position: absolute;
-    top: 190px;
-    left: 24px;
-    right: 24px;
-    bottom: 24px;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    max-height: calc(100vh - 320px);
     background: var(--bg-sidebar);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-md);
@@ -1449,25 +1464,49 @@ input, textarea, button, select {
     color: var(--text-primary);
 }
 
+/* --- Right Sidebar Toggle Default --- */
+.right-sidebar-toggle {
+    display: none !important;
+}
+
 /* --- Responsive & Mobile Styles --- */
 @media (max-width: 1200px) {
-    .app-container {
-        grid-template-columns: var(--sidebar-left-width) 1fr;
+    .app-container.has-active-lesson {
+        grid-template-columns: 1fr var(--sidebar-right-width);
     }
     
-    .sidebar-right {
+    .app-container.no-active-lesson {
+        grid-template-columns: 1fr;
+    }
+    
+    .sidebar-left {
         position: fixed;
-        right: -320px;
+        left: -320px;
         top: 0;
         bottom: 0;
         width: 320px;
         box-shadow: var(--shadow-lg);
-        transition: right var(--transition-speed) ease;
+        transition: left var(--transition-speed) ease;
         z-index: 200;
     }
     
-    .sidebar-right.active {
-        right: 0;
+    .sidebar-left.active {
+        left: 0;
+    }
+    
+    .sidebar-right {
+        position: static;
+        width: 100%;
+        box-shadow: none;
+        z-index: 100;
+    }
+    
+    .hamburger-menu {
+        display: flex;
+    }
+    
+    .mobile-close-btn {
+        display: flex;
     }
     
     .content-header {
@@ -1476,7 +1515,8 @@ input, textarea, button, select {
 }
 
 @media (max-width: 900px) {
-    .app-container {
+    .app-container.has-active-lesson,
+    .app-container.no-active-lesson {
         grid-template-columns: 1fr;
     }
     
@@ -1495,8 +1535,27 @@ input, textarea, button, select {
         left: 0;
     }
     
+    .sidebar-right {
+        position: fixed;
+        right: -320px;
+        top: 0;
+        bottom: 0;
+        width: 320px;
+        box-shadow: var(--shadow-lg);
+        transition: right var(--transition-speed) ease;
+        z-index: 200;
+    }
+    
+    .sidebar-right.active {
+        right: 0;
+    }
+    
     .hamburger-menu {
         display: flex;
+    }
+    
+    .right-sidebar-toggle {
+        display: flex !important;
     }
     
     .mobile-close-btn {

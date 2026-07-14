@@ -91,6 +91,10 @@ const addIdsToHeadings = (html) => {
   });
 };
 
+const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
 export default function Home() {
   // App state
   const [lessons, setLessons] = useState([]);
@@ -744,14 +748,7 @@ export default function Home() {
       {/* Top Progress Scroll Indicator */}
       <div id="scroll-progress" className="scroll-progress-bar"></div>
 
-      <div 
-        className="app-container"
-        style={{ 
-          gridTemplateColumns: activeLesson 
-            ? 'var(--sidebar-left-width) 1fr var(--sidebar-right-width)' 
-            : 'var(--sidebar-left-width) 1fr' 
-        }}
-      >
+      <div className={`app-container ${activeLesson ? 'has-active-lesson' : 'no-active-lesson'}`}>
         
         {/* Sidebar Left: Navigation & Overall Progress */}
         <aside className={`sidebar-left ${isSidebarLeftActive ? 'active' : ''}`}>
@@ -790,61 +787,64 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Search Box */}
-          <div className="search-box">
-            <Search className="search-icon" size={16} />
-            <input 
-              type="text" 
-              placeholder="Tìm kiếm bài viết..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button 
-                className="clear-search-btn"
-                onClick={() => setSearchQuery('')}
-              >
-                <X size={16} />
-              </button>
+          {/* Search Wrapper */}
+          <div className="search-wrapper">
+            {/* Search Box */}
+            <div className="search-box">
+              <Search className="search-icon" size={16} />
+              <input 
+                type="text" 
+                placeholder="Tìm kiếm bài viết..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button 
+                  className="clear-search-btn"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Search Results Drawer */}
+            {showSearchResults && (
+              <div className="search-results-list">
+                <div className="search-results-header">
+                  <span>KẾT QUẢ TÌM KIẾM ({searchResults.length})</span>
+                  <button onClick={() => setSearchQuery('')}>Đóng</button>
+                </div>
+                <div id="search-results-items">
+                  {searchResults.length === 0 ? (
+                    <p style={{ padding: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Không tìm thấy bài viết nào.
+                    </p>
+                  ) : (
+                    searchResults.map(result => (
+                      <div 
+                        key={result.id}
+                        className="search-result-item"
+                        onClick={() => {
+                          const target = lessons.find(l => l.id === result.id);
+                          if (target) openLesson(target);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <h4>{result.title}</h4>
+                        <p className="search-result-snippet" dangerouslySetInnerHTML={{
+                          __html: result.snippet.replace(
+                            new RegExp(`(${escapeRegExp(searchQuery)})`, 'gi'), 
+                            '<mark>$1</mark>'
+                          )
+                        }}></p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
           </div>
-
-          {/* Search Results Drawer */}
-          {showSearchResults && (
-            <div className="search-results-list">
-              <div className="search-results-header">
-                <span>KẾT QUẢ TÌM KIẾM ({searchResults.length})</span>
-                <button onClick={() => setSearchQuery('')}>Đóng</button>
-              </div>
-              <div id="search-results-items">
-                {searchResults.length === 0 ? (
-                  <p style={{ padding: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Không tìm thấy bài viết nào.
-                  </p>
-                ) : (
-                  searchResults.map(result => (
-                    <div 
-                      key={result.id}
-                      className="search-result-item"
-                      onClick={() => {
-                        const target = lessons.find(l => l.id === result.id);
-                        if (target) openLesson(target);
-                        setSearchQuery('');
-                      }}
-                    >
-                      <h4>{result.title}</h4>
-                      <p className="search-result-snippet" dangerouslySetInnerHTML={{
-                        __html: result.snippet.replace(
-                          new RegExp(`(${searchQuery})`, 'gi'), 
-                          '<mark>$1</mark>'
-                        )
-                      }}></p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Lesson Navigation */}
           <nav className="lesson-navigation">
@@ -965,8 +965,7 @@ export default function Home() {
               
               {activeLesson && (
                 <button 
-                  className="hamburger-menu" 
-                  style={{ display: 'none' }} // visible only on tablet/mobile layout
+                  className="hamburger-menu right-sidebar-toggle" 
                   onClick={() => setIsSidebarRightActive(true)}
                 >
                   <ListOrdered size={20} />
