@@ -1008,16 +1008,7 @@ export default function Home() {
                 )}
               </div>
             </div>
-                ) : (
-                  <>
-                    <span>Tổng quan</span>
-                    <ChevronRight size={14} />
-                    <span className="active">Bảng học tập</span>
-                  </>
-                )}
-              </div>
-            </div>
-            
+          
             <div className="header-right">
               {authUser ? (
                 <div className="auth-user-chip">
