@@ -1880,7 +1880,7 @@ input, textarea, button, select {
     padding-left: 10px;
     border-left: 2px solid var(--border-color);
     display: flex;
-    flex-direction: flex-direction: column;
+    flex-direction: column;
     gap: 4px;
 }
 
