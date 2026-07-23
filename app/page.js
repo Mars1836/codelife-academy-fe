@@ -1209,6 +1209,74 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* 1. Document Collections / Folders Section */}
+                {Object.keys(documentGroups).length > 0 && (
+                  <div className="dashboard-category-section">
+                    <h3 className="dashboard-category-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Folder size={18} style={{ color: '#818cf8' }} />
+                      <span>Bộ tài liệu &amp; Thư mục bài học</span>
+                    </h3>
+
+                    <div className="dashboard-groups-grid">
+                      {Object.keys(documentGroups).map(groupSlug => {
+                        const group = documentGroups[groupSlug];
+                        const completedGroupCount = group.lessons.filter(l => lessonStatuses[l.id] === 'completed').length;
+                        const groupProgress = Math.round((completedGroupCount / group.lessons.length) * 100);
+
+                        return (
+                          <div key={groupSlug} className="dashboard-folder-card">
+                            <div className="folder-card-header">
+                              <div className="folder-card-icon">
+                                <Folder size={24} />
+                              </div>
+                              <div className="folder-card-title-group">
+                                <span className="folder-card-label">BỘ TÀI LIỆU</span>
+                                <h4 className="folder-card-title">{group.title}</h4>
+                              </div>
+                            </div>
+
+                            <div className="folder-card-progress">
+                              <div className="folder-progress-bar">
+                                <div className="folder-progress-fill" style={{ width: `${groupProgress}%` }}></div>
+                              </div>
+                              <div className="folder-progress-meta">
+                                <span>{completedGroupCount}/{group.lessons.length} bài đã hoàn thành</span>
+                                <span>{groupProgress}%</span>
+                              </div>
+                            </div>
+
+                            <div className="folder-lessons-preview">
+                              {group.lessons.slice(0, 4).map(lesson => {
+                                const status = lessonStatuses[lesson.id] || 'unread';
+                                return (
+                                  <div 
+                                    key={lesson.id} 
+                                    className="folder-lesson-item"
+                                    onClick={() => openLesson(lesson)}
+                                  >
+                                    <span className="folder-lesson-order">#{String(lesson.order).padStart(2, '0')}</span>
+                                    <span className="folder-lesson-title">{lesson.title}</span>
+                                    <span className={`status-indicator ${status}`}></span>
+                                  </div>
+                                );
+                              })}
+                              {group.lessons.length > 4 && (
+                                <div 
+                                  className="folder-more-lessons"
+                                  onClick={() => openLesson(group.lessons[0])}
+                                >
+                                  Vào học bộ bài viết (+{group.lessons.length - 4} bài khác) &rarr;
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Standalone Categories Section */}
                 {Object.keys(groupedLessons).map(category => (
                   <div key={category} className="dashboard-category-section">
                     <h3 className="dashboard-category-title">{category}</h3>
