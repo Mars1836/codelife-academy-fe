@@ -5,7 +5,7 @@ import {
   Terminal, X, Search, Menu, ChevronRight, ChevronDown, 
   Folder, Clock, FileText, CheckCircle2, ArrowLeft, ArrowRight, 
   Sun, Moon, ListOrdered, Edit3, Check, Lightbulb, RotateCcw,
-  UserRound, LogOut
+  UserRound, LogOut, BookOpen, Layers
 } from 'lucide-react';
 import { marked } from 'marked';
 
@@ -68,6 +68,9 @@ const toLesson = (document) => {
     wordCount,
     readingTime: document.readingTime || Math.max(1, Math.ceil(wordCount / 200)),
     category: normalizeCategory(document.category, document.slug),
+    groupSlug: document.groupSlug || '',
+    groupTitle: document.groupTitle || '',
+    order: document.order || 0,
   };
 };
 
@@ -106,6 +109,14 @@ export default function Home() {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [isSidebarLeftActive, setIsSidebarLeftActive] = useState(false);
   const [isSidebarRightActive, setIsSidebarRightActive] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  const toggleGroupExpand = (groupSlug) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupSlug]: prev[groupSlug] === undefined ? false : !prev[groupSlug]
+    }));
+  };
   
   // Lesson status & progress (stored in localStorage)
   // Format: { [lessonId]: 'unread' | 'studying' | 'completed' }
@@ -707,9 +718,27 @@ export default function Home() {
     saveLearningProgress(activeLesson.id, { checkedFlashcards: {} }).catch(console.error);
   };
 
-  // Group lessons by category
-  const groupedLessons = {};
+  // Group lessons by Series (Group) and Category
+  const documentGroups = {};
+  const standaloneLessons = [];
+
   lessons.forEach(lesson => {
+    if (lesson.groupSlug) {
+      if (!documentGroups[lesson.groupSlug]) {
+        documentGroups[lesson.groupSlug] = {
+          slug: lesson.groupSlug,
+          title: lesson.groupTitle || lesson.groupSlug,
+          lessons: []
+        };
+      }
+      documentGroups[lesson.groupSlug].lessons.push(lesson);
+    } else {
+      standaloneLessons.push(lesson);
+    }
+  });
+
+  const groupedLessons = {};
+  standaloneLessons.forEach(lesson => {
     if (!groupedLessons[lesson.category]) {
       groupedLessons[lesson.category] = [];
     }
@@ -848,6 +877,69 @@ export default function Home() {
 
           {/* Lesson Navigation */}
           <nav className="lesson-navigation">
+            {/* 1. Document Groups / Series */}
+            {Object.keys(documentGroups).length > 0 && (
+              <div className="nav-category">
+                <h3 className="category-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Layers size={13} />
+                  <span>Bộ tài liệu &amp; Chuỗi bài</span>
+                </h3>
+                {Object.keys(documentGroups).map(groupSlug => {
+                  const group = documentGroups[groupSlug];
+                  const isExpanded = expandedGroups[groupSlug] !== false; // default true
+                  const completedGroupCount = group.lessons.filter(l => lessonStatuses[l.id] === 'completed').length;
+
+                  return (
+                    <div key={groupSlug} className="group-section">
+                      <div className="group-header" onClick={() => toggleGroupExpand(groupSlug)}>
+                        <div className="group-title-wrapper">
+                          <Folder size={16} className="group-icon" />
+                          <span className="group-title-text" title={group.title}>{group.title}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="group-badge">{completedGroupCount}/{group.lessons.length}</span>
+                          <ChevronDown size={14} className={`group-toggle-icon ${isExpanded ? 'expanded' : ''}`} />
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="group-lesson-list">
+                          {group.lessons.map(lesson => {
+                            const status = lessonStatuses[lesson.id] || 'unread';
+                            const isActive = activeLesson?.id === lesson.id;
+                            const orderLabel = lesson.order > 0 ? `#${String(lesson.order).padStart(2, '0')}` : `#00`;
+
+                            return (
+                              <div
+                                key={lesson.id}
+                                className={`lesson-item-link ${isActive ? 'active' : ''}`}
+                                onClick={() => openLesson(lesson)}
+                              >
+                                <span className="lesson-order-badge">{orderLabel}</span>
+                                <div className="lesson-status-icon">
+                                  <span className={`status-indicator ${status}`}></span>
+                                </div>
+                                <div className="lesson-title-meta">
+                                  <span className="lesson-title-text" title={lesson.title}>
+                                    {lesson.title}
+                                  </span>
+                                  <div className="lesson-meta-desc">
+                                    <span>{lesson.readingTime} phút</span>
+                                    <span>{lesson.wordCount} từ</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 2. Standalone Lessons */}
             {Object.keys(groupedLessons).map(category => (
               <div key={category} className="nav-category">
                 <h3 className="category-title">{category}</h3>
@@ -894,11 +986,28 @@ export default function Home() {
               </button>
               <div className="breadcrumb">
                 {activeLesson ? (
+                  activeLesson.groupSlug ? (
+                    <>
+                      <span>{activeLesson.groupTitle || activeLesson.groupSlug}</span>
+                      <ChevronRight size={14} />
+                      <span className="active">#{String(activeLesson.order).padStart(2, '0')} {activeLesson.title}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{activeLesson.category}</span>
+                      <ChevronRight size={14} />
+                      <span className="active">{activeLesson.title}</span>
+                    </>
+                  )
+                ) : (
                   <>
-                    <span>{activeLesson.category}</span>
+                    <span>Tổng quan</span>
                     <ChevronRight size={14} />
-                    <span className="active">{activeLesson.title}</span>
+                    <span className="active">Bảng học tập</span>
                   </>
+                )}
+              </div>
+            </div>
                 ) : (
                   <>
                     <span>Tổng quan</span>
@@ -981,6 +1090,18 @@ export default function Home() {
           >
             {activeLesson ? (
               <article className="document-container" ref={articleRef}>
+                {activeLesson.groupSlug && (
+                  <div className="series-overview-banner">
+                    <BookOpen size={20} className="series-banner-icon" />
+                    <div className="series-banner-info">
+                      <span className="series-banner-label">
+                        Bộ bài viết {activeLesson.order > 0 ? `· Bài #${String(activeLesson.order).padStart(2, '0')}` : ''}
+                      </span>
+                      <span className="series-banner-title">{activeLesson.groupTitle || activeLesson.groupSlug}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="document-meta-info">
                   <span className="meta-item"><Folder size={14} /> {activeLesson.category}</span>
                   <span className="meta-item"><Clock size={14} /> {activeLesson.readingTime} phút đọc</span>

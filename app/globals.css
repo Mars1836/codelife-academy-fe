@@ -1809,3 +1809,124 @@ input, textarea, button, select {
     align-items: center;
     gap: 4px;
 }
+
+/* --- Document Groups / Series --- */
+.group-section {
+    margin-bottom: 24px;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--transition-speed) ease;
+}
+
+.group-header:hover {
+    border-color: var(--border-focus);
+    background: var(--bg-tertiary, rgba(255,255,255,0.03));
+}
+
+.group-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.group-icon {
+    color: #818cf8;
+    flex-shrink: 0;
+}
+
+.group-title-text {
+    font-family: var(--font-header), sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.15);
+    color: #818cf8;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.group-toggle-icon {
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.group-toggle-icon.expanded {
+    transform: rotate(180deg);
+}
+
+.group-lesson-list {
+    margin-top: 6px;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: flex-direction: column;
+    gap: 4px;
+}
+
+.lesson-order-badge {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: monospace;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.series-overview-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--border-radius-md, 8px);
+}
+
+.series-banner-icon {
+    color: #818cf8;
+    flex-shrink: 0;
+}
+
+.series-banner-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.series-banner-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #818cf8;
+}
+
+.series-banner-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
